@@ -8,6 +8,14 @@ async function run(): Promise<void> {
     const dependencies = getArrayFromString(
       getInput('dependencies', {required: true})
     )
+    const clearResolutions =
+      (
+        getInput('clear-resolutions', {trimWhitespace: true}) || ''
+      ).toUpperCase() === 'TRUE'
+    const clearPrepare =
+      (
+        getInput('clear-prepare', {trimWhitespace: true}) || ''
+      ).toUpperCase() === 'TRUE'
     const pkgPath = getInput('path') || './package.json'
     const resolvePath = path.resolve(process.cwd(), pkgPath)
     if (!fs.existsSync(resolvePath)) {
@@ -16,23 +24,28 @@ async function run(): Promise<void> {
 
     const jsonStr = await fs.promises.readFile(resolvePath)
     const jsonObj = JSON.parse(jsonStr.toString())
-    if (dependencies) {
-      const clean = dependencies.reduce((acc, dependency) => {
-        const version =
-          jsonObj.dependencies[dependency] ||
-          jsonObj.devDependencies[dependency]
-        if (!version) {
-          warning(`No version found for ${dependency}`)
-          return acc
-        }
-        return {
-          [dependency]: version,
-          ...acc
-        }
-      }, {})
-      jsonObj.dependencies = clean
-      jsonObj.devDependencies = {}
+    const clean = dependencies.reduce((acc, dependency) => {
+      const version =
+        jsonObj.dependencies[dependency] || jsonObj.devDependencies[dependency]
+      if (!version) {
+        warning(`No version found for ${dependency}`)
+        return acc
+      }
+      return {
+        [dependency]: version,
+        ...acc
+      }
+    }, {})
+    jsonObj.dependencies = clean
+    if (clearResolutions) {
+      jsonObj.resolutions = {}
     }
+    if (clearPrepare) {
+      const scripts = jsonObj.scripts
+      delete scripts.prepare
+      jsonObj.scripts = scripts
+    }
+    jsonObj.devDependencies = {}
 
     await fs.promises.writeFile(resolvePath, JSON.stringify(jsonObj, null, 2))
     debug(JSON.stringify(jsonObj, null, 2))
